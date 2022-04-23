@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 
 use crate::consts;
 
-fn encode_block(xl: u32, xr: u32, keys: &Keys) -> (u32, u32) {
+pub fn encode_block(xl: u32, xr: u32, keys: &Keys) -> (u32, u32) {
     let mut xl = xl;
     let mut xr = xr;
     for i in 0usize..16usize {
@@ -23,7 +23,7 @@ fn f(int: u32, keys: &Keys) -> u32 {
     return (part ^ keys.sbox[2][bytes[2] as usize]).wrapping_add(keys.sbox[3][bytes[3] as usize]);
 }
 
-fn decode_block(xl: u32, xr: u32, keys: &Keys) -> (u32, u32) {
+pub fn decode_block(xl: u32, xr: u32, keys: &Keys) -> (u32, u32) {
     let mut xl = xl;
     let mut xr = xr;
     for i in (2..18usize).rev() {
@@ -37,7 +37,7 @@ fn decode_block(xl: u32, xr: u32, keys: &Keys) -> (u32, u32) {
     return (xl, xr);
 }
 
-fn bytes_to_u32<I>(arr: I) -> u32
+pub fn bytes_to_u32<I>(arr: I) -> u32
 where
     I: IntoIterator,
     I::Item: Borrow<u8>,
@@ -45,7 +45,7 @@ where
     arr.into_iter().take(4).fold(0u32, |acc, x| (acc << 8) | *x.borrow() as u32)
 }
 
-struct Keys {
+pub struct Keys {
     pub parray: [u32; 18],
     pub sbox: [[u32; 256]; 4],
 }
