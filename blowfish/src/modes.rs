@@ -130,6 +130,49 @@ where
     Ok(())
 }
 
+pub fn enc_cfb<R, W>(input: &mut R, key: &[u8], iv: &[u8], out: &mut W) -> Result<()>
+where
+    R: Read,
+    W: Write,
+{
+    let keys = Keys::new(key);
+    let mut buf = vec![0u8; BLOCK_SIZE];
+    let mut encoded = iv[..BLOCK_SIZE].to_vec();
+    let mut read_len: usize;
+
+    loop {
+        read_len = input.read(&mut buf)?;
+        encoded = enc8(&encoded, &keys);
+        encoded = xor(&buf[..read_len], &encoded);
+        out.write(&encoded)?;
+        if read_len < BLOCK_SIZE { break; }
+    }
+    out.flush()?;
+    Ok(())
+}
+
+pub fn dec_cfb<R, W>(input: &mut R, key: &[u8], iv: &[u8], out: &mut W) -> Result<()>
+where
+    R: Read,
+    W: Write,
+{
+    let keys = Keys::new(key);
+    let mut buf = vec![0u8; BLOCK_SIZE];
+    let mut prev_enc = iv[..BLOCK_SIZE].to_vec();
+    let mut read_len: usize;
+
+    loop {
+        read_len = input.read(&mut buf)?;
+        let mut decoded = enc8(&prev_enc, &keys);
+        decoded = xor(&buf[..read_len], &decoded);
+        prev_enc.copy_from_slice(&buf);
+        out.write(&decoded)?;
+        if read_len < BLOCK_SIZE { break; }
+    }
+    out.flush()?;
+    Ok(())
+}
+
 #[allow(non_upper_case_globals)]
 #[cfg(test)]
 mod tests {
@@ -163,6 +206,22 @@ mod tests {
 
         actual.clear();
         dec_cbc(&mut crypted.as_slice(), &key, &iv, &mut actual).unwrap();
+        assert_eq!(&plain, &actual.as_slice());
+    }
+
+    #[test]
+    fn cfb_test() {
+        let plain = b"7654321 Now is the time for \x00";
+        let iv: [u8; 8] = [0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10];
+        let key: [u8; 16] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xF0, 0xE1, 0xD2, 0xC3, 0xB4, 0xA5, 0x96, 0x87];
+        let crypted: [u8; 29] = [0xE7, 0x32, 0x14, 0xA2, 0x82, 0x21, 0x39, 0xCA, 0xF2, 0x6E, 0xCF, 0x6D, 0x2E, 0xB9, 0xE7, 0x6E, 0x3D, 0xA3, 0xDE, 0x04, 0xD1, 0x51, 0x72, 0x00, 0x51, 0x9D, 0x57, 0xA6, 0xC3];
+        let mut actual = Vec::with_capacity(crypted.len());
+
+        enc_cfb(&mut plain.as_slice(), &key, &iv, &mut actual).unwrap();
+        assert_eq!(&crypted, &actual[..]);
+
+        actual.clear();
+        dec_cfb(&mut crypted.as_slice(), &key, &iv, &mut actual).unwrap();
         assert_eq!(&plain, &actual.as_slice());
     }
 }
