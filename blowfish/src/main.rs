@@ -1,14 +1,19 @@
 use std::io::{BufReader, BufWriter, Write};
 use std::fs::File;
 use std::env;
+use std::collections::HashMap;
 
 pub mod blowfish;
 pub mod consts;
 pub mod modes;
 
-const VALID_MODES: [&str; 3] = ["ecb", "cbc", "cfb"];
-
 fn main() {
+    let mut modes_map: HashMap<&str, [fn(&mut BufReader<File>, &[u8], &[u8], &mut BufWriter<File>) -> std::io::Result<()>; 2]> = HashMap::new();
+    modes_map.insert("ecb", [|r, p, _, w| modes::enc_ecb(r, p, w), |r, p, _, w| modes::dec_ecb(r, p, w)]);
+    modes_map.insert("cbc", [modes::enc_cbc, modes::dec_cbc]);
+    modes_map.insert("cfb", [modes::enc_cfb, modes::dec_cfb]);
+    let valid_modes: Vec<&str> = modes_map.keys().map(|s| *s).collect();
+
     let args: Vec<String> = env::args().collect();
     if args.len() < 4 || ["-h", "--help"].contains(&args[1].as_str()) {
         println!("HELP");
@@ -18,9 +23,9 @@ fn main() {
     let in_path = &args[2];
     let out_path = &args[3];
 
-    let encryption = match args[1].as_str() {
-        "-d" | "--decrypt" => false,
-        "-e" | "--encrypt" => true,
+    let encrypt = match args[1].as_str() {
+        "-e" | "--encrypt" => 0,
+        "-d" | "--decrypt" => 1,
         _ => panic!("Incorrect option"),
     };
 
@@ -33,9 +38,9 @@ fn main() {
     let password: Vec<u8>;
     let mut iv = Vec::new();
 
-    while !VALID_MODES.contains(&mode.as_str()) {
+    while !valid_modes.contains(&mode.as_str()) {
         mode.clear();
-        print!("Enter mode({}): ", VALID_MODES.join(","));
+        print!("Enter mode({}): ", valid_modes.join(","));
         std::io::stdout().flush().unwrap();
         std::io::stdin().read_line(&mut mode).unwrap();
         mode = mode.trim().to_ascii_lowercase();
@@ -70,22 +75,9 @@ fn main() {
         } else { break; }
     }
     password = hex_to_bytes(&hex_password);
-
-    if encryption {
-        match mode.as_str() {
-            "ecb" => modes::enc_ecb(&mut in_file, &password, &mut out_file).unwrap(),
-            "cbc" => modes::enc_cbc(&mut in_file, &password, &iv, &mut out_file).unwrap(),
-            "cfb" => modes::enc_cfb(&mut in_file, &password, &iv, &mut out_file).unwrap(),
-            _ => (),
-        }
-    } else {
-        match mode.as_str() {
-            "ecb" => modes::dec_ecb(&mut in_file, &password, &mut out_file).unwrap(),
-            "cbc" => modes::dec_cbc(&mut in_file, &password, &iv, &mut out_file).unwrap(),
-            "cfb" => modes::dec_cfb(&mut in_file, &password, &iv, &mut out_file).unwrap(),
-            _ => (),
-        }
-    }
+    
+    let algorithm = modes_map.get(mode.as_str()).unwrap()[encrypt];
+    algorithm(&mut in_file, &password, &iv, &mut out_file).unwrap();
     println!("Done.");
 }
 
